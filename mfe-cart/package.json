@@ -1,0 +1,12 @@
+{
+  "name": "mfe-cart",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MFE Cart (React, no-build) cho Mini Shop",
+  "scripts": {
+    "start": "serve -l 9003 --cors ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}
