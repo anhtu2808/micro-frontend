@@ -1,11 +1,11 @@
-import { registerApplication, start } from "single-spa";
+import { registerApplication, start, navigateToUrl } from "single-spa";
 
 // ---------------------------------------------------------------------------
-// M2: Đăng ký MFE Navbar thật (React), load qua import-map.
-//   - app: () => import("@mishop/navbar")  -> import-map tra ra URL :9001/navbar.js
-//     Module đó export bootstrap/mount/unmount -> single-spa dùng làm lifecycle.
-//   - activeWhen: () => true -> navbar hiện ở MỌI route.
-// (M3 sẽ thêm products/cart với activeWhen theo route.)
+// M3: 3 MFE.
+//   - navbar:   activeWhen () => true            -> mọi route
+//   - products: activeWhen /products (và "/")    -> chỉ route sản phẩm
+//   - cart:     activeWhen /cart                 -> chỉ route giỏ hàng
+// Khi đổi route, single-spa tự mount cái vừa active & unmount cái vừa rời.
 // ---------------------------------------------------------------------------
 registerApplication({
   name: "@mishop/navbar",
@@ -13,6 +13,24 @@ registerApplication({
   activeWhen: () => true,
 });
 
+registerApplication({
+  name: "@mishop/products",
+  app: () => import("@mishop/products"),
+  activeWhen: (location) =>
+    location.pathname === "/" || location.pathname.startsWith("/products"),
+});
+
+registerApplication({
+  name: "@mishop/cart",
+  app: () => import("@mishop/cart"),
+  activeWhen: (location) => location.pathname.startsWith("/cart"),
+});
+
 start();
+
+// Vào "/" thì hiển thị products mặc định (cho gọn URL).
+if (window.location.pathname === "/") {
+  navigateToUrl("/products");
+}
 
 console.log("[root-config] single-spa started ✅");

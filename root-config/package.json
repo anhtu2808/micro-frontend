@@ -4,7 +4,7 @@
   "private": true,
   "description": "single-spa root-config cho Mini Shop",
   "scripts": {
-    "start": "serve -l 9000 ."
+    "start": "serve -s -l 9000 ."
   },
   "devDependencies": {
     "serve": "^14.2.4"

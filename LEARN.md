@@ -155,4 +155,85 @@ cd mfe-navbar && npm start        # :9001 (có --cors)
 > CORS (`Access-Control-Allow-Origin`) ở server MFE, vì ES module cross-origin bị chính sách same-origin chặn nếu thiếu.
 
 ---
+## M3 — MFE load theo route
+
+### activeWhen quyết định mount/unmount
+```js
+activeWhen: (location) => location.pathname.startsWith("/products")
+```
+Mỗi lần URL đổi, single-spa gọi lại tất cả `activeWhen`. App nào chuyển `false → true` được **mount**, `true → false` được **unmount**. Mở Console khi đổi route sẽ thấy:
+```
+/products : [products] mount
+→ /cart   : [products] unmount → [cart] mount
+```
+→ Chỉ MFE đang active mới nằm trong DOM. Đây là cách 2 MFE **không tải/hiện cùng lúc**.
+
+### Mỗi MFE tự quản container của mình
+products mount tạo `#products-root` trong `#app-content`, unmount thì `remove()`. Tránh 2 MFE giẫm chân nhau khi dùng chung vùng mount.
+
+### SPA fallback (`serve -s`)
+Điều hướng bằng `navigateToUrl` dùng `history.pushState` → không gọi server, không reload. Nhưng nếu **reload** ở `/cart`, browser request `GET /cart` → server phải trả `index.html` (không phải 404) để single-spa tự xử route. `serve -s` làm việc này (production: cấu hình nginx/CDN tương tự).
+
+### Lazy load
+`app: () => import("@mishop/cart")` — code của cart **chỉ tải khi route /cart active** lần đầu (dynamic import). Vào thẳng /products sẽ không tải bundle cart → tiết kiệm.
+
+### ⭐ Câu hỏi phỏng vấn M3
+**Q: Làm sao 2 MFE không cùng tải/hiện một lúc?**
+> `activeWhen` theo route + dynamic import. single-spa chỉ mount MFE active và lazy-load code của nó lần đầu; MFE rời route bị unmount khỏi DOM.
+
+**Q: Reload giữa chừng ở /cart bị trắng trang/404 — vì sao và sửa thế nào?**
+> Server không có file `/cart` nên trả 404. Cần cấu hình SPA fallback: mọi route không khớp file → trả `index.html` (nginx `try_files`, `serve -s`, CDN rewrite).
+
+**Q: single-spa biết khi nào đổi app bằng cách nào?**
+> Nó "vá" `history.pushState/replaceState` và nghe `popstate`/`hashchange`; mỗi lần điều hướng nó chạy lại reroute → so `activeWhen` → mount/unmount tương ứng.
+
+---
+## M4 — Giao tiếp giữa các MFE
+
+### Vấn đề gốc
+MFE bị **unmount thì mất React state**. Giỏ hàng phải sống xuyên suốt → state dùng chung **không thể** nằm trong `useState` của 1 MFE. Phải đặt ở nơi mọi MFE truy cập được.
+
+### Giải pháp dùng ở đây: shared module + event bus
+- `@mishop/shared` (`store.js`) giữ mảng `items` ở **module scope**. Import-map trỏ về **1 URL** → browser load **1 lần** → 1 mảng duy nhất cho mọi MFE.
+- Thay đổi → phát `window` CustomEvent `mishop:cart-changed`.
+- MFE nghe event để cập nhật UI; khi mount lại thì gọi `getItems()` đọc trạng thái hiện tại (không mất dữ liệu).
+
+```
+products.addItem(p)
+   └─> store.items.push(p)
+   └─> window.dispatchEvent("mishop:cart-changed")
+            ├─> navbar  (luôn mounted) -> badge +1 ngay
+            └─> cart    (nếu đang /cart) -> render lại danh sách
+```
+
+### Các cách giao tiếp MFE (so sánh — hay hỏi)
+| Cách | Ưu | Nhược |
+|------|----|-------|
+| **Custom event / event bus** (`window`) | Đơn giản, loose-coupling, đa framework | Khó trace, dễ "rối event", không type-safe |
+| **Shared state lib** (Redux/Zustand qua shared module) | State tập trung, mạnh | Coupling vào 1 lib/version, nặng hơn |
+| **Props / parcels** (single-spa parcel) | Rõ ràng, có cấu trúc cha-con | Chỉ hợp quan hệ cha-con, không hợp anh-em |
+| **URL / query params** | Bookmark được, đơn giản | Chỉ hợp state nhỏ |
+
+→ Thực tế hay **kết hợp**: shared module giữ state + event bus thông báo.
+
+### Vì sao `?external=react`?
+react-dom build mặc định của esm.sh **nhúng kèm 1 bản react riêng**. Để react-dom dùng **đúng react của ta** (qua import-map) → thêm `?external=react`; khi đó react-dom `import "react"` (bare) → resolve về cùng instance. Thiếu bước này dễ lỗi **Invalid hook call** (2 bản React). (Chi tiết shared deps ở M5.)
+
+### Chạy thử (giờ 5 server: 9000–9004)
+Bấm "Thêm vào giỏ" ở /products → **badge navbar tăng ngay**; qua /cart thấy danh sách + tổng tiền vẫn còn.
+
+### ⭐ Câu hỏi phỏng vấn M4
+**Q: Các MFE giao tiếp với nhau bằng cách nào?**
+> Custom event/event bus (loose-coupling), shared state qua shared module, props/parcel (cha-con), hoặc URL. Tránh để MFE gọi thẳng nội bộ của nhau.
+
+**Q: Vì sao không để state giỏ hàng trong useState của 1 MFE?**
+> Vì MFE bị unmount khi rời route → mất state. State dùng chung phải nằm ngoài React (shared module / store) để tồn tại độc lập với vòng đời MFE.
+
+**Q: Nhược điểm của event bus?**
+> Khó debug/trace luồng, dễ rò rỉ listener nếu quên cleanup, không type-safe, dễ thành "spaghetti event" khi nhiều MFE.
+
+**Q: Làm sao 1 shared module chỉ có 1 instance?**
+> import-map trỏ tất cả về cùng 1 URL → browser cache module theo URL → load 1 lần → mọi MFE chia sẻ cùng biến module scope.
+
+---
 <!-- Các milestone sau sẽ được thêm vào đây khi học tới -->

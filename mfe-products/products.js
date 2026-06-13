@@ -1,6 +1,7 @@
 // MFE Products — danh sách sản phẩm (M3: data mock; M6: gọi API MongoDB).
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { addItem } from "@mishop/shared";
 
 // Data mock tạm. M6 sẽ fetch từ http://localhost:4000/api/products
 const MOCK_PRODUCTS = [
@@ -13,8 +14,8 @@ const vnd = (n) => n.toLocaleString("vi-VN") + "₫";
 
 function Products() {
   const addToCart = (product) => {
-    // M4 sẽ thay bằng phát custom event để cart cập nhật. Tạm log.
-    console.log("[products] thêm vào giỏ:", product.name);
+    // Đẩy vào shared store -> store phát event "mishop:cart-changed" cho cart & navbar.
+    addItem(product);
   };
 
   return React.createElement(

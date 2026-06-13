@@ -1,16 +1,64 @@
-// MFE Cart — giỏ hàng (M3: tĩnh; M4: nghe event từ products; M6: lưu MongoDB).
-import React from "react";
+// MFE Cart — giỏ hàng. Đọc shared store khi mount + nghe thay đổi live.
+import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import { getItems, onCartChanged } from "@mishop/shared";
+
+const vnd = (n) => n.toLocaleString("vi-VN") + "₫";
 
 function Cart() {
+  // getItems() đọc lại trạng thái HIỆN TẠI từ shared store khi mount lại
+  // -> không mất dữ liệu dù trước đó cart đã bị unmount.
+  const [items, setItems] = useState(getItems());
+
+  useEffect(() => {
+    // Lắng nghe thay đổi -> cập nhật UI. Trả hàm hủy để cleanup khi unmount.
+    return onCartChanged((next) => setItems([...next]));
+  }, []);
+
+  const total = items.reduce((sum, p) => sum + p.price, 0);
+
+  if (items.length === 0) {
+    return React.createElement(
+      "div",
+      { style: { padding: 20, fontFamily: "system-ui, sans-serif" } },
+      React.createElement("h2", null, "Giỏ hàng"),
+      React.createElement(
+        "p",
+        { style: { color: "#6b7280" } },
+        'Giỏ trống. Qua trang "Sản phẩm" bấm "Thêm vào giỏ".'
+      )
+    );
+  }
+
   return React.createElement(
     "div",
     { style: { padding: 20, fontFamily: "system-ui, sans-serif" } },
-    React.createElement("h2", null, "Giỏ hàng"),
+    React.createElement("h2", null, `Giỏ hàng (${items.length})`),
+    React.createElement(
+      "ul",
+      { style: { listStyle: "none", padding: 0, display: "grid", gap: 8, maxWidth: 420 } },
+      items.map((p, i) =>
+        React.createElement(
+          "li",
+          {
+            key: i,
+            style: {
+              display: "flex",
+              justifyContent: "space-between",
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              padding: "10px 14px",
+            },
+          },
+          React.createElement("span", null, p.name),
+          React.createElement("span", null, vnd(p.price))
+        )
+      )
+    ),
     React.createElement(
       "p",
-      { style: { color: "#6b7280" } },
-      "Giỏ hàng trống. (M4 sẽ cập nhật khi bấm \"Thêm vào giỏ\" ở trang Sản phẩm.)"
+      { style: { fontWeight: "bold", marginTop: 12 } },
+      `Tổng: ${vnd(total)}`
     )
   );
 }

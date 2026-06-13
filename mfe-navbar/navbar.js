@@ -1,11 +1,16 @@
 // MFE Navbar — viết bằng React, KHÔNG build (dùng React ESM từ CDN + import-map).
 // Cố ý tự viết lifecycle bằng ReactDOM để thấy rõ "single-spa-react" làm gì bên trong.
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { navigateToUrl } from "single-spa";
+import { getItems, onCartChanged } from "@mishop/shared";
 
 // --- Component React bình thường (không JSX để khỏi cần babel) ---
 function Navbar() {
+  // navbar luôn mounted -> badge cập nhật live ngay cả khi đang ở trang products.
+  const [count, setCount] = useState(getItems().length);
+  useEffect(() => onCartChanged((items) => setCount(items.length)), []);
+
   const link = (href, label) =>
     React.createElement(
       "a",
@@ -32,7 +37,7 @@ function Navbar() {
     },
     React.createElement("strong", { style: { marginRight: 24 } }, "🛒 Mini Shop"),
     link("/products", "Sản phẩm"),
-    link("/cart", "Giỏ hàng")
+    link("/cart", `Giỏ hàng (${count})`)
   );
 }
 
